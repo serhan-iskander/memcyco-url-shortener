@@ -136,7 +136,7 @@ clicks (
 |---|---|---|
 | `RANDOM_BASE62` | Cryptographically random N-char base62 code (default 7). Retries on collision. | none (optional `length` 4–16) |
 | `HASH_TRUNC` | SHA-256 of URL (+ optional `salt`), first N base62 chars. Lengthens on collision. | none (optional `salt`) |
-| `SEQUENTIAL` | Reads from a dedicated Postgres sequence, base62-encodes the id. | none |
+| `SEQUENTIAL` | Reads from a dedicated Postgres sequence, base62-encodes the id. ⚠ **Security caveat**: codes leak creation order and total volume (an adversary can enumerate). Don't use it for links whose existence should stay private. | none |
 | `CUSTOM_ALIAS` | User-supplied alias. Regex `^[a-zA-Z0-9_-]{3,32}$`. No collision retry — duplicates return 409. | `alias` (required) |
 
 ---
@@ -236,7 +236,9 @@ memcyco/
 - **No authentication** — the spec doesn't mention it; single-tenant.
 - **Single backend instance** — the in-process click queue is fine for the demo. A multi-replica deployment would swap `ClickBatchWriter` for Kafka or Redis Streams.
 - **Trusting client-supplied URLs** — the backend validates URL syntax but doesn't fetch the destination or check it against safe-browsing lists. Production would add that.
-- **Rate limit + geo enrichment off by default** — flag with `APP_RATE_LIMIT_ENABLED=true` and `APP_GEO_ENABLED=true` (+ mount `GeoLite2-City.mmdb`) to turn on.
+- **Rate limit + geo enrichment off by default** — flag with `APP_RATE_LIMIT_ENABLED=true` and `APP_GEO_ENABLED=true`. Geo also needs a mounted MMDB — see `docker/README.md` for instructions.
+- **Demo credentials in `docker-compose.yml`** — `POSTGRES_PASSWORD=memcyco` is hardcoded for one-command setup. See `.env.example` for the override surface; any real deployment should externalize the password and rotate it.
+- **Analytics date range** — the backend supports `?from=&to=` on `/analytics`, but the UI only exposes the hour/day bucket toggle. Server-side filtering by an explicit window is a one-component-add away.
 
 ---
 

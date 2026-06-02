@@ -81,6 +81,54 @@ docker compose --profile full down -v
 This will **not** touch the `noca-docker-redis-1` container or its network
 — that lifecycle belongs to the noca-docker project.
 
+## Bonus: enabling geo enrichment
+
+The backend ships with a `MaxMindGeoEnricher` that annotates each click row's
+JSONB `data` column with `country` / `city` derived from the visitor IP. It's
+disabled by default — turning it on takes two steps:
+
+### 1. Get the MMDB file
+
+MaxMind publishes the free GeoLite2-City database. Sign up for a free account
+at https://www.maxmind.com/en/geolite2/signup, download
+**GeoLite2-City.mmdb** (≈70 MB), and place it somewhere readable from the
+backend container.
+
+### 2. Mount the file + flip the flag
+
+Add a volume and two env vars to the `backend` service in
+`docker-compose.yml`:
+
+```yaml
+  backend:
+    # ... existing config ...
+    environment:
+      # ... existing env ...
+      APP_GEO_ENABLED: "true"
+      APP_GEO_DB_PATH: "/data/GeoLite2-City.mmdb"
+    volumes:
+      - ./docker/geo/GeoLite2-City.mmdb:/data/GeoLite2-City.mmdb:ro
+```
+
+Then redeploy:
+
+```powershell
+docker compose --profile full up -d --build backend
+```
+
+Verify a redirect produces a click row with country/city populated (replace
+`<code>` with one of your short codes):
+
+```powershell
+curl http://localhost:8080/<code>
+docker exec memcyco-postgres psql -U memcyco -d memcyco -c `
+  "SELECT data FROM clicks ORDER BY id DESC LIMIT 1;"
+```
+
+The lookup happens **synchronously on the redirect hot path** but uses an
+in-memory mmdb (microseconds), well within budget — see the load-bearing
+Javadoc on `GeoEnricher`.
+
 ## Host probe summary (captured at scaffold time)
 
 - `noca-docker-redis-1` running (`redis:7-alpine`), exposed only on the

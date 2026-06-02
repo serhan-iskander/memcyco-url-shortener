@@ -97,6 +97,13 @@ services:
       - backend
     ports:
       - "5173:80"
+    healthcheck:
+      # Hit the SPA root through nginx; -q/-O- keeps it silent + non-blocking.
+      test: ["CMD-SHELL", "wget -q -O- http://localhost/ >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     networks:
       - memcyco
 
