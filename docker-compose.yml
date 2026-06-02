@@ -1,0 +1,118 @@
+# memcyco — URL shortener stack
+#
+# Two run modes:
+#
+#   1. Default (reuse host Redis):
+#        docker compose up -d
+#      Starts postgres, backend, frontend. Reuses the existing Redis
+#      container `noca-docker-redis-1` by attaching the `backend` service
+#      to the external `noca-docker_default` network and resolving `redis`
+#      via that network's DNS alias.
+#
+#   2. Full (everything in this compose):
+#        docker compose --profile full up -d
+#      Starts a project-owned Redis on the internal network instead.
+#      Use this on hosts where the noca-docker stack is not running.
+#
+# Override the Redis target without editing this file:
+#   SPRING_DATA_REDIS_HOST=host.docker.internal docker compose up -d
+#
+# Cleanup: `docker compose down -v` (the -v drops the memcyco_pgdata volume).
+
+name: memcyco
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: memcyco-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: memcyco
+      POSTGRES_USER: memcyco
+      POSTGRES_PASSWORD: memcyco
+    ports:
+      # Port 5432 was free on the host at scaffold time. If you later run
+      # another Postgres on 5432, change the host side here to 5433.
+      - "5432:5432"
+    volumes:
+      - memcyco_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U memcyco -d memcyco"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - memcyco
+
+  # Only started when the `full` profile is active.
+  # In default mode, the backend reaches the pre-existing
+  # `noca-docker-redis-1` container via the external network below.
+  redis:
+    image: redis:7-alpine
+    container_name: memcyco-redis
+    restart: unless-stopped
+    profiles: ["full"]
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - memcyco
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: memcyco-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/memcyco
+      SPRING_DATASOURCE_USERNAME: memcyco
+      SPRING_DATASOURCE_PASSWORD: memcyco
+      # Both modes resolve `redis` as the hostname:
+      #   - default mode: alias on `noca-docker_default` external network
+      #   - full profile: alias on `memcyco` internal network
+      SPRING_DATA_REDIS_HOST: ${SPRING_DATA_REDIS_HOST:-redis}
+      SPRING_DATA_REDIS_PORT: ${SPRING_DATA_REDIS_PORT:-6379}
+      SPRING_PROFILES_ACTIVE: docker
+    ports:
+      - "8080:8080"
+    networks:
+      - memcyco
+      - shared-redis
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: memcyco-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+    networks:
+      - memcyco
+
+volumes:
+  memcyco_pgdata:
+    name: memcyco_pgdata
+
+networks:
+  memcyco:
+    name: memcyco
+    driver: bridge
+  # External network owned by the noca-docker compose stack. The backend
+  # joins it to reach the existing `redis` container at alias `redis:6379`.
+  # If you don't have that stack running, switch to `--profile full` (which
+  # starts a project-owned Redis) — the backend will still find `redis` via
+  # the `memcyco` network and this attachment is harmless.
+  shared-redis:
+    name: noca-docker_default
+    external: true
