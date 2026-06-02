@@ -62,7 +62,10 @@ app:
     batch-size: 100
     flush-interval-ms: 500
   rate-limit:
-    enabled: ${APP_RATE_LIMIT_ENABLED:false}
+    # On by default. The public redirect endpoint is the one unauthenticated, abusable
+    # surface, so it ships protected. The limiter fails open if Redis is unreachable, so
+    # this never costs redirect availability. Set APP_RATE_LIMIT_ENABLED=false to disable.
+    enabled: ${APP_RATE_LIMIT_ENABLED:true}
     redirect-per-ip-per-minute: 60
   geo:
     enabled: ${APP_GEO_ENABLED:false}

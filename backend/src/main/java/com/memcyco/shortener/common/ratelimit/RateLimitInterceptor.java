@@ -28,12 +28,23 @@ import java.util.function.Supplier;
 /**
  * Per-IP token-bucket rate limiter on the redirect endpoint. Backed by Redis
  * (Bucket4j + Lettuce) so it works across replicas. Feature-flagged by
- * {@code app.rate-limit.enabled}; when off, this is a no-op pass-through.
+ * {@code app.rate-limit.enabled} (on by default); when off, this is a no-op
+ * pass-through.
+ *
+ * <p><strong>Fail-open:</strong> the redirect path must stay available even when
+ * Redis is down. If the limiter can't reach Redis it logs and lets traffic through,
+ * backing off for a cooldown so we don't pay a connection timeout on every redirect.
+ * Rate limiting is best-effort protection, never a hard dependency of the hot path.
  */
 @Component
 public class RateLimitInterceptor implements HandlerInterceptor {
 
     private static final Logger log = LoggerFactory.getLogger(RateLimitInterceptor.class);
+
+    /** After a Redis failure, skip the limiter entirely for this long before retrying. */
+    private static final long DEGRADE_COOLDOWN_SECONDS = 30;
+    private static final long DEGRADE_COOLDOWN_NANOS =
+            Duration.ofSeconds(DEGRADE_COOLDOWN_SECONDS).toNanos();
 
     private final AppProperties props;
     private final String redisHost;
@@ -41,6 +52,8 @@ public class RateLimitInterceptor implements HandlerInterceptor {
     private volatile ProxyManager<String> proxyManager;
     private volatile RedisClient redisClient;
     private volatile StatefulRedisConnection<String, byte[]> connection;
+    /** {@code System.nanoTime()} deadline until which the limiter stays in fail-open mode. */
+    private volatile long degradedUntilNanos;
 
     public RateLimitInterceptor(AppProperties props,
                                 @Value("${spring.data.redis.host:localhost}") String redisHost,
@@ -48,6 +61,9 @@ public class RateLimitInterceptor implements HandlerInterceptor {
         this.props = props;
         this.redisHost = redisHost;
         this.redisPort = redisPort;
+        // Seed to a past instant so the overflow-safe deadline check reads "not degraded"
+        // from the first request (nanoTime can be negative at JVM start).
+        this.degradedUntilNanos = System.nanoTime();
     }
 
     @Override
@@ -57,18 +73,33 @@ public class RateLimitInterceptor implements HandlerInterceptor {
         if (!props.rateLimit().enabled()) {
             return true;
         }
-        ensureInitialised();
-        String key = "ratelimit:redirect:" + clientIp(request);
+        // Within the post-failure cooldown: stay out of Redis's way and fail open.
+        if (System.nanoTime() - degradedUntilNanos < 0) {
+            return true;
+        }
 
-        Supplier<BucketConfiguration> config = () -> BucketConfiguration.builder()
-                .addLimit(Bandwidth.builder()
-                        .capacity(props.rateLimit().redirectPerIpPerMinute())
-                        .refillIntervally(props.rateLimit().redirectPerIpPerMinute(), Duration.ofMinutes(1))
-                        .build())
-                .build();
+        ConsumptionProbe probe;
+        try {
+            ensureInitialised();
+            String key = "ratelimit:redirect:" + clientIp(request);
 
-        Bucket bucket = proxyManager.builder().build(key, config);
-        ConsumptionProbe probe = bucket.tryConsumeAndReturnRemaining(1);
+            Supplier<BucketConfiguration> config = () -> BucketConfiguration.builder()
+                    .addLimit(Bandwidth.builder()
+                            .capacity(props.rateLimit().redirectPerIpPerMinute())
+                            .refillIntervally(props.rateLimit().redirectPerIpPerMinute(), Duration.ofMinutes(1))
+                            .build())
+                    .build();
+
+            Bucket bucket = proxyManager.builder().build(key, config);
+            probe = bucket.tryConsumeAndReturnRemaining(1);
+        } catch (RuntimeException ex) {
+            // Redis unreachable or Bucket4j wiring failed: never take down redirects for it.
+            degradedUntilNanos = System.nanoTime() + DEGRADE_COOLDOWN_NANOS;
+            log.warn("Rate limiter unavailable — failing open for {}s: {}",
+                    DEGRADE_COOLDOWN_SECONDS, ex.getMessage());
+            return true;
+        }
+
         if (probe.isConsumed()) {
             response.addHeader("X-RateLimit-Remaining", Long.toString(probe.getRemainingTokens()));
             return true;
