@@ -6,6 +6,7 @@ import com.maxmind.geoip2.model.CityResponse;
 import com.memcyco.shortener.config.AppProperties;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -22,6 +23,7 @@ import java.util.Map;
  * TODO: hot-reload on DB file change (Phase 3 if needed).
  */
 @Component
+@RequiredArgsConstructor
 @ConditionalOnProperty(prefix = "app.geo", name = "enabled", havingValue = "true")
 public class MaxMindGeoEnricher implements GeoEnricher {
 
@@ -29,10 +31,6 @@ public class MaxMindGeoEnricher implements GeoEnricher {
 
     private final AppProperties props;
     private DatabaseReader reader;
-
-    public MaxMindGeoEnricher(AppProperties props) {
-        this.props = props;
-    }
 
     @PostConstruct
     void init() {

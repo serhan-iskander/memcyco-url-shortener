@@ -11,6 +11,7 @@ import com.memcyco.shortener.shortlink.service.ShortLinkService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.CacheControl;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -29,18 +30,13 @@ import java.util.concurrent.TimeUnit;
 
 @RestController
 @RequestMapping("/api/short-links")
+@RequiredArgsConstructor
 @Tag(name = "Short links", description = "CRUD + QR for short links")
 public class ShortLinkController {
 
     private final ShortLinkService service;
     private final QrService qrService;
     private final ShortLinkMapper mapper;
-
-    public ShortLinkController(ShortLinkService service, QrService qrService, ShortLinkMapper mapper) {
-        this.service = service;
-        this.qrService = qrService;
-        this.mapper = mapper;
-    }
 
     @PostMapping
     @Operation(summary = "Create a short link")

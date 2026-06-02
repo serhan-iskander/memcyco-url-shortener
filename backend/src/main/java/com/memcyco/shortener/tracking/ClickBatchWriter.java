@@ -4,6 +4,7 @@ import com.memcyco.shortener.config.AppProperties;
 import com.memcyco.shortener.shortlink.dto.ClickEventDto;
 import com.memcyco.shortener.shortlink.repo.ClickJdbcRepository;
 import jakarta.annotation.PreDestroy;
+import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -21,6 +22,7 @@ import java.util.Map;
  * (the cache holds the authoritative near-real-time value).
  */
 @Component
+@RequiredArgsConstructor
 public class ClickBatchWriter {
 
     private static final Logger log = LoggerFactory.getLogger(ClickBatchWriter.class);
@@ -28,14 +30,6 @@ public class ClickBatchWriter {
     private final ClickTracker tracker;
     private final ClickJdbcRepository jdbcRepository;
     private final AppProperties props;
-
-    public ClickBatchWriter(ClickTracker tracker,
-                            ClickJdbcRepository jdbcRepository,
-                            AppProperties props) {
-        this.tracker = tracker;
-        this.jdbcRepository = jdbcRepository;
-        this.props = props;
-    }
 
     @Scheduled(fixedDelayString = "${app.click-tracker.flush-interval-ms}")
     public void flush() {

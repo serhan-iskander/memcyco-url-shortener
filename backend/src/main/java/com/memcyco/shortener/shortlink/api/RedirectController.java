@@ -6,6 +6,7 @@ import com.memcyco.shortener.tracking.ClickTracker;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -17,20 +18,13 @@ import java.time.Clock;
 import java.time.Instant;
 
 @RestController
+@RequiredArgsConstructor
 @Tag(name = "Redirect", description = "Public redirect endpoint")
 public class RedirectController {
 
     private final RedirectService redirectService;
     private final ClickTracker clickTracker;
     private final Clock clock;
-
-    public RedirectController(RedirectService redirectService,
-                              ClickTracker clickTracker,
-                              Clock clock) {
-        this.redirectService = redirectService;
-        this.clickTracker = clickTracker;
-        this.clock = clock;
-    }
 
     @GetMapping("/{shortCode:[a-zA-Z0-9_-]{1,32}}")
     @Operation(summary = "Resolve a short code and 302 to the original URL")

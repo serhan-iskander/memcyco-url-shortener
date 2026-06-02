@@ -4,6 +4,7 @@ import com.memcyco.shortener.common.error.ShortLinkNotFoundException;
 import com.memcyco.shortener.shortlink.dto.AnalyticsResponse;
 import com.memcyco.shortener.shortlink.repo.AnalyticsJdbcRepository;
 import com.memcyco.shortener.shortlink.repo.ShortLinkRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,6 +14,7 @@ import java.time.Instant;
 import java.util.List;
 
 @Service
+@RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class AnalyticsService {
 
@@ -21,14 +23,6 @@ public class AnalyticsService {
     private final AnalyticsJdbcRepository analyticsRepo;
     private final ShortLinkRepository shortLinkRepo;
     private final Clock clock;
-
-    public AnalyticsService(AnalyticsJdbcRepository analyticsRepo,
-                            ShortLinkRepository shortLinkRepo,
-                            Clock clock) {
-        this.analyticsRepo = analyticsRepo;
-        this.shortLinkRepo = shortLinkRepo;
-        this.clock = clock;
-    }
 
     public AnalyticsResponse forShortLink(Long id, String bucket, Instant from, Instant to) {
         if (!shortLinkRepo.existsById(id)) {

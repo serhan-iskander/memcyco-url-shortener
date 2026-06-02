@@ -7,6 +7,7 @@ import com.memcyco.shortener.shortlink.cache.ShortLinkCache;
 import com.memcyco.shortener.shortlink.domain.LinkStatus;
 import com.memcyco.shortener.shortlink.domain.ShortLink;
 import com.memcyco.shortener.shortlink.repo.ShortLinkRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,17 +18,12 @@ import java.util.Optional;
  * Hot path: Redis hit → status check → return. On miss, fall through to DB and warm.
  */
 @Service
+@RequiredArgsConstructor
 public class RedirectService {
 
     private final ShortLinkCache cache;
     private final ShortLinkRepository repo;
     private final ShortLinkMapper mapper;
-
-    public RedirectService(ShortLinkCache cache, ShortLinkRepository repo, ShortLinkMapper mapper) {
-        this.cache = cache;
-        this.repo = repo;
-        this.mapper = mapper;
-    }
 
     /**
      * @return the destination URL and the short_link id (needed by the click tracker).

@@ -3,6 +3,7 @@ package com.memcyco.shortener.shortlink.repo;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.memcyco.shortener.shortlink.dto.ClickEventDto;
+import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -20,6 +21,7 @@ import java.util.Map;
  * append-only event stream.
  */
 @Repository
+@RequiredArgsConstructor
 public class ClickJdbcRepository {
 
     private static final String INSERT_SQL =
@@ -27,11 +29,6 @@ public class ClickJdbcRepository {
 
     private final JdbcTemplate jdbc;
     private final ObjectMapper mapper;
-
-    public ClickJdbcRepository(JdbcTemplate jdbc, ObjectMapper mapper) {
-        this.jdbc = jdbc;
-        this.mapper = mapper;
-    }
 
     public int[] insertBatch(List<ClickEventDto> events) {
         if (events.isEmpty()) {

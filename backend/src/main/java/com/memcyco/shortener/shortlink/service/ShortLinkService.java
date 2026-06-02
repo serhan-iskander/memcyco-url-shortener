@@ -16,6 +16,7 @@ import com.memcyco.shortener.strategy.GenerationContext;
 import com.memcyco.shortener.strategy.ParameterSchemaValidator;
 import com.memcyco.shortener.strategy.ShortCodeStrategy;
 import com.memcyco.shortener.strategy.StrategyRegistry;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
@@ -31,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 
 @Service
+@RequiredArgsConstructor
 @Transactional
 public class ShortLinkService {
 
@@ -44,20 +46,6 @@ public class ShortLinkService {
     private final ShortLinkMapper mapper;
     private final ApplicationEventPublisher events;
     private final Clock clock;
-
-    public ShortLinkService(ShortLinkRepository repo,
-                            StrategyRegistry strategies,
-                            ParameterSchemaValidator paramValidator,
-                            ShortLinkMapper mapper,
-                            ApplicationEventPublisher events,
-                            Clock clock) {
-        this.repo = repo;
-        this.strategies = strategies;
-        this.paramValidator = paramValidator;
-        this.mapper = mapper;
-        this.events = events;
-        this.clock = clock;
-    }
 
     public ShortLinkResponse create(CreateShortLinkRequest req) {
         validateExpiresFuture(req.expiresAt());

@@ -5,6 +5,7 @@ import com.memcyco.shortener.shortlink.cache.CachedShortLink;
 import com.memcyco.shortener.shortlink.domain.LinkStatus;
 import com.memcyco.shortener.shortlink.domain.ShortLink;
 import com.memcyco.shortener.shortlink.dto.ShortLinkResponse;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.time.Clock;
@@ -14,15 +15,11 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Component
+@RequiredArgsConstructor
 public class ShortLinkMapper {
 
     private final AppProperties props;
     private final Clock clock;
-
-    public ShortLinkMapper(AppProperties props, Clock clock) {
-        this.props = props;
-        this.clock = clock;
-    }
 
     public ShortLinkResponse toResponse(ShortLink sl) {
         return new ShortLinkResponse(

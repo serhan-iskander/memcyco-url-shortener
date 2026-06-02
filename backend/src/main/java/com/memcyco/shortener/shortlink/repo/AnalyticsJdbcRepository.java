@@ -1,6 +1,7 @@
 package com.memcyco.shortener.shortlink.repo;
 
 import com.memcyco.shortener.shortlink.dto.AnalyticsResponse;
+import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -14,16 +15,13 @@ import java.util.Set;
  * {@code date_trunc} / {@code ->>} operators and arrange the SQL exactly.
  */
 @Repository
+@RequiredArgsConstructor
 public class AnalyticsJdbcRepository {
 
     private static final Set<String> ALLOWED_BUCKETS =
             Set.of("minute", "hour", "day", "week", "month");
 
     private final JdbcTemplate jdbc;
-
-    public AnalyticsJdbcRepository(JdbcTemplate jdbc) {
-        this.jdbc = jdbc;
-    }
 
     public List<AnalyticsResponse.BucketPoint> timeSeries(Long shortLinkId, String bucket,
                                                            Instant from, Instant to) {

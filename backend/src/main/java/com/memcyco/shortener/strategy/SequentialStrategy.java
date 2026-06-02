@@ -1,11 +1,13 @@
 package com.memcyco.shortener.strategy;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
 
 @Component
+@RequiredArgsConstructor
 public class SequentialStrategy implements ShortCodeStrategy {
 
     static final String NAME = "SEQUENTIAL";
@@ -13,10 +15,6 @@ public class SequentialStrategy implements ShortCodeStrategy {
     private static final String NEXT_VAL_SQL = "SELECT nextval('seq_short_code_counter')";
 
     private final JdbcTemplate jdbc;
-
-    public SequentialStrategy(JdbcTemplate jdbc) {
-        this.jdbc = jdbc;
-    }
 
     @Override
     public String name() { return NAME; }

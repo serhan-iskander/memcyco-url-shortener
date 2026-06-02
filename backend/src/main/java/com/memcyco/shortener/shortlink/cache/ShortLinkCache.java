@@ -1,6 +1,7 @@
 package com.memcyco.shortener.shortlink.cache;
 
 import com.memcyco.shortener.config.AppProperties;
+import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
@@ -14,6 +15,7 @@ import java.time.Instant;
 import java.util.Optional;
 
 @Component
+@RequiredArgsConstructor
 public class ShortLinkCache {
 
     private static final Logger log = LoggerFactory.getLogger(ShortLinkCache.class);
@@ -24,16 +26,6 @@ public class ShortLinkCache {
     private final StringRedisTemplate stringRedis;
     private final AppProperties props;
     private final Clock clock;
-
-    public ShortLinkCache(RedisTemplate<String, CachedShortLink> redis,
-                          StringRedisTemplate stringRedis,
-                          AppProperties props,
-                          Clock clock) {
-        this.redis = redis;
-        this.stringRedis = stringRedis;
-        this.props = props;
-        this.clock = clock;
-    }
 
     public Optional<CachedShortLink> get(String code) {
         try {
