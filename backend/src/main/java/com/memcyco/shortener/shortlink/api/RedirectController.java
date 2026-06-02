@@ -30,6 +30,9 @@ public class RedirectController {
     @Operation(summary = "Resolve a short code and 302 to the original URL")
     public ResponseEntity<Void> redirect(@PathVariable String shortCode,
                                          HttpServletRequest request) {
+        // resolve() now atomically INCRs the Redis counter and gates on max_clicks,
+        // so we don't need a separate markRedirected() call afterwards. Eliminates
+        // the TOCTOU race where two concurrent requests both passed the gate.
         RedirectService.RedirectResult result = redirectService.resolve(shortCode);
 
         // Fire-and-forget click capture. Synchronous metadata extraction, async DB write.
@@ -40,7 +43,6 @@ public class RedirectController {
                 request.getHeader("User-Agent"),
                 clientIp(request));
         clickTracker.track(event);
-        redirectService.markRedirected(shortCode);
 
         return ResponseEntity.status(HttpStatus.FOUND)
                 .location(URI.create(result.originalUrl()))

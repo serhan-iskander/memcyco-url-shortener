@@ -40,6 +40,12 @@ public class ShortLinkCache {
     public void put(String code, CachedShortLink value) {
         Duration ttl = computeTtl(value);
         try {
+            // Reset the per-cache-window click counter alongside the entity. The cached
+            // entity's clickCount() is the persisted DB base; the counter only tracks
+            // clicks that happened since this entity was loaded. Without this reset the
+            // counter would survive natural TTL expiry of the entity and double-count
+            // every click that has already been flushed into the DB column.
+            stringRedis.delete(countKey(code));
             redis.opsForValue().set(key(code), value, ttl);
         } catch (DataAccessException ex) {
             log.warn("Redis SET failed for code={}: {}", code, ex.getMessage());

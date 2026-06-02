@@ -93,6 +93,85 @@ class RedirectServiceTest {
         verify(cache).put(eq(CODE), any(CachedShortLink.class));
     }
 
+    // --- Bug 1 regression: per-window counter reset --------------------------
+
+    /**
+     * Pre-fix: shortlink:CODE expired naturally → cache MISS → repo returns row
+     * with click_count=5 (DB column, already incremented by ClickBatchWriter) →
+     * cache.put(...) WITHOUT resetting shortlink:count:CODE (still 5 from the
+     * previous window) → next decide() saw base(5) + extra(5) = 10. Linked at
+     * max=10 would 410 prematurely.
+     *
+     * Post-fix: cache.put MUST DEL the counter so the new window starts at 0.
+     * Verify cache.put is invoked, then assert the test setup gives base+0
+     * total when the counter is fresh (mocked to return 1L = the INCR-then-gate).
+     */
+    @Test
+    @DisplayName("bug 1: cache miss → cache.put is called (which must also reset the counter)")
+    void cacheMissResetsCounterOnPut() {
+        when(cache.get(CODE)).thenReturn(Optional.empty());
+        // Simulate the "TTL expired but DB has accumulated clicks" scenario.
+        ShortLink entity = mockActiveLink(1L, CODE, URL, null, 10L, 5L);
+        when(repository.findByShortCode(CODE)).thenReturn(Optional.of(entity));
+        // After cache.put resets the counter, INCR returns 1 (this redirect is #6 overall).
+        when(cache.incrementClickCount(CODE, 1L)).thenReturn(1L);
+
+        RedirectService.RedirectResult result = service.resolve(CODE);
+
+        // Did not 410 — base(5) + new(1) = 6 < max(10), correctly under the cap.
+        assertThat(result.originalUrl()).isEqualTo(URL);
+        // cache.put MUST be called on miss — its implementation is responsible for
+        // also DEL-ing shortlink:count:* (see ShortLinkCache.put + its unit test).
+        verify(cache).put(eq(CODE), any(CachedShortLink.class));
+    }
+
+    // --- Bug 2 regression: atomic INCR-then-gate (no TOCTOU) -----------------
+
+    /**
+     * Pre-fix: resolve() read the counter via cache.currentClickCount, gated,
+     * then the controller called markRedirected() to INCR. Two parallel requests
+     * at count=9 / max=10 both passed the gate before either INCRed → overshoot.
+     *
+     * Post-fix: resolve() INCRs first (atomic), gates on the post-increment
+     * value. The 10th request sees newCounter=10 → total=10 ≤ max → OK.
+     * The 11th request sees newCounter=11 → total=11 > max → 410.
+     */
+    @Test
+    @DisplayName("bug 2: post-INCR value > max_clicks → 410 (atomic gate)")
+    void incrementBeforeGateRejectsOvershoot() {
+        // base=0 from cache; max=10; INCR returns 11 (the over-budget caller).
+        CachedShortLink cached = CachedShortLink.hit(1L, URL, null, 10L, 0L, true);
+        when(cache.get(CODE)).thenReturn(Optional.of(cached));
+        when(cache.incrementClickCount(CODE, 1L)).thenReturn(11L);
+
+        assertThatThrownBy(() -> service.resolve(CODE))
+                .isInstanceOf(ShortLinkGoneException.class)
+                .extracting("status").isEqualTo(LinkStatus.EXHAUSTED);
+    }
+
+    @Test
+    @DisplayName("bug 2: post-INCR value == max_clicks → still ACTIVE (boundary)")
+    void incrementBeforeGateAllowsLastClick() {
+        CachedShortLink cached = CachedShortLink.hit(1L, URL, null, 10L, 0L, true);
+        when(cache.get(CODE)).thenReturn(Optional.of(cached));
+        when(cache.incrementClickCount(CODE, 1L)).thenReturn(10L);
+
+        RedirectService.RedirectResult result = service.resolve(CODE);
+        assertThat(result.originalUrl()).isEqualTo(URL);
+    }
+
+    @Test
+    @DisplayName("expired link: bail out BEFORE incrementing (don't waste INCRs)")
+    void expiredLinkDoesNotIncrement() {
+        CachedShortLink cached = CachedShortLink.hit(
+                1L, URL, Instant.now().minus(1, ChronoUnit.HOURS), null, 0L, true);
+        when(cache.get(CODE)).thenReturn(Optional.of(cached));
+
+        assertThatThrownBy(() -> service.resolve(CODE))
+                .isInstanceOf(ShortLinkGoneException.class);
+        verify(cache, never()).incrementClickCount(anyString(), any(Long.class));
+    }
+
     // --- Expired -----------------------------------------------------------
 
     @Test
@@ -113,10 +192,10 @@ class RedirectServiceTest {
     @Test
     @DisplayName("click-exhausted link → ShortLinkGoneException")
     void exhaustedLinkRaisesGone() {
+        // base=5 from cache (already at max), max=5; INCR returns 6 → 410.
         CachedShortLink cached = CachedShortLink.hit(1L, URL, null, 5L, 5L, true);
         when(cache.get(CODE)).thenReturn(Optional.of(cached));
-        // Make the live counter mirror the cached count so the gate triggers.
-        when(cache.currentClickCount(CODE)).thenReturn(5L);
+        when(cache.incrementClickCount(CODE, 1L)).thenReturn(6L);
 
         assertThatThrownBy(() -> service.resolve(CODE))
                 .isInstanceOf(ShortLinkGoneException.class)
@@ -172,15 +251,6 @@ class RedirectServiceTest {
 
         assertThatThrownBy(() -> service.resolve(CODE))
                 .isInstanceOf(ShortLinkNotFoundException.class);
-    }
-
-    // --- markRedirected ----------------------------------------------------
-
-    @Test
-    @DisplayName("markRedirected bumps the cache click counter")
-    void markRedirectedIncrementsCounter() {
-        service.markRedirected(CODE);
-        verify(cache).incrementClickCount(CODE, 1L);
     }
 
     // --- Helpers -----------------------------------------------------------
