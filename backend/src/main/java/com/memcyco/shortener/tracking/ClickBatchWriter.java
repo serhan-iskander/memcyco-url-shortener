@@ -9,7 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -30,6 +30,7 @@ public class ClickBatchWriter {
     private final ClickTracker tracker;
     private final ClickJdbcRepository jdbcRepository;
     private final AppProperties props;
+    private final TransactionTemplate txTemplate;
 
     @Scheduled(fixedDelayString = "${app.click-tracker.flush-interval-ms}")
     public void flush() {
@@ -53,18 +54,26 @@ public class ClickBatchWriter {
         }
     }
 
-    @Transactional
-    protected void writeBatch(List<ClickEventDto> batch) {
+    private void writeBatch(List<ClickEventDto> batch) {
         try {
-            jdbcRepository.insertBatch(batch);
-            Map<Long, Long> deltas = new HashMap<>();
-            for (ClickEventDto e : batch) {
-                deltas.merge(e.shortLinkId(), 1L, Long::sum);
-            }
-            jdbcRepository.bumpClickCounts(deltas);
+            // Real transaction boundary so the insert and the count bump commit
+            // together or not at all. A method-level @Transactional here would be a
+            // no-op: writeBatch is called from within this same bean (flush /
+            // drainOnShutdown), so the Spring proxy is bypassed. TransactionTemplate
+            // opens the transaction programmatically and isn't subject to that.
+            txTemplate.executeWithoutResult(status -> {
+                jdbcRepository.insertBatch(batch);
+                Map<Long, Long> deltas = new HashMap<>();
+                for (ClickEventDto e : batch) {
+                    deltas.merge(e.shortLinkId(), 1L, Long::sum);
+                }
+                jdbcRepository.bumpClickCounts(deltas);
+            });
         } catch (RuntimeException ex) {
-            // Don't propagate — failing once shouldn't tear down the scheduler.
-            log.warn("Batched click write failed for {} events — dropped: {}",
+            // Catch OUTSIDE the transaction: a failure rolls back cleanly, and we
+            // don't propagate so one bad batch can't tear down the scheduler or the
+            // shutdown drain.
+            log.warn("Batched click write failed for {} events, dropped: {}",
                     batch.size(), ex.getMessage());
         }
     }

@@ -18,9 +18,13 @@ import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import com.memcyco.shortener.tracking.ClickBatchWriter;
 import com.memcyco.shortener.shortlink.dto.ClickEventDto;
@@ -48,6 +52,14 @@ class ClickBatchWriterTest {
         );
     }
 
+    /**
+     * A real TransactionTemplate over a stub tx manager: it executes the callback
+     * (so the batched writes still run and can be verified) without needing a DB.
+     */
+    private static TransactionTemplate directTx() {
+        return new TransactionTemplate(mock(PlatformTransactionManager.class));
+    }
+
     private static ClickEventDto sampleEvent() {
         Map<String, Object> data = new HashMap<>();
         data.put("referer", "https://r");
@@ -66,7 +78,7 @@ class ClickBatchWriterTest {
             tracker.track(sampleEvent());
         }
 
-        ClickBatchWriter writer = new ClickBatchWriter(tracker, jdbcRepository, properties);
+        ClickBatchWriter writer = new ClickBatchWriter(tracker, jdbcRepository, properties, directTx());
         writer.flush();
 
         ArgumentCaptor<List<ClickEventDto>> batchCaptor = ArgumentCaptor.forClass(List.class);
@@ -85,7 +97,7 @@ class ClickBatchWriterTest {
             tracker.track(sampleEvent());
         }
 
-        ClickBatchWriter writer = new ClickBatchWriter(tracker, jdbcRepository, properties);
+        ClickBatchWriter writer = new ClickBatchWriter(tracker, jdbcRepository, properties, directTx());
         // The scheduler calls flush() repeatedly; each call drains up to batchSize.
         writer.flush();
         writer.flush();
@@ -101,7 +113,7 @@ class ClickBatchWriterTest {
         ClickTracker tracker = new ClickTracker(properties,
                 new NoopGeoEnricher(), new SimpleMeterRegistry());
 
-        ClickBatchWriter writer = new ClickBatchWriter(tracker, jdbcRepository, properties);
+        ClickBatchWriter writer = new ClickBatchWriter(tracker, jdbcRepository, properties, directTx());
         writer.flush();
 
         verifyNoInteractions(jdbcRepository);
