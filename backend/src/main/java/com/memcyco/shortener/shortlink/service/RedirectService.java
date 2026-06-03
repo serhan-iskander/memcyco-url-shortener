@@ -9,7 +9,6 @@ import com.memcyco.shortener.shortlink.domain.ShortLink;
 import com.memcyco.shortener.shortlink.repo.ShortLinkRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 
@@ -96,8 +95,12 @@ public class RedirectService {
         }
     }
 
-    @Transactional(readOnly = true)
-    protected ShortLink loadFromDb(String shortCode) {
+    private ShortLink loadFromDb(String shortCode) {
+        // Single repository read. SimpleJpaRepository wraps it in its own read-only
+        // transaction, so an explicit @Transactional here would be redundant anyway
+        // (and a no-op besides, since this is an internal same-bean call). The entity
+        // is all scalar columns with no lazy associations, so mapping it to a
+        // CachedShortLink after the session closes is safe.
         return repo.findByShortCode(shortCode).orElse(null);
     }
 

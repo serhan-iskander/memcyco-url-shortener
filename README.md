@@ -8,7 +8,7 @@ Full-stack URL shortener with per-link click analytics. Java 21 + Spring Boot 3.
 
 ```bash
 # Bring up everything (postgres + redis + backend + frontend):
-docker compose --profile full up -d --build
+docker compose up -d --build
 
 # Open the UI:
 #   http://localhost:5173
@@ -204,7 +204,7 @@ cd frontend && npm install && npm run test:coverage
 ```
 memcyco/
 ├── README.md                       (this file)
-├── docker-compose.yml              (postgres, redis, backend, frontend; use `--profile full`)
+├── docker-compose.yml              (postgres, redis, backend, frontend; self-contained, one command)
 ├── .env.example                    (override surface for compose + JVM)
 ├── .gitignore
 ├── backend/                        (Spring Boot 3.3 + Java 21 + Maven wrapper)
